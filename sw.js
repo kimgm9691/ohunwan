@@ -2,7 +2,7 @@
    - 앱 셸(HTML/아이콘/매니페스트)을 캐싱해 오프라인에서도 열리게 함
    - Supabase API·이미지 요청은 캐싱하지 않고 항상 네트워크로 (실시간 데이터 보장)
    - 배포 후 파일을 수정하면 CACHE 버전 숫자를 올려주세요 (v1 → v2 …) */
-const CACHE = 'owanwan-v5';
+const CACHE = 'owanwan-v6';
 const APP_SHELL = [
   './',
   './index.html',

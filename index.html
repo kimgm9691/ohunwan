@@ -254,7 +254,7 @@
   </nav>
 
   <!-- ===== TOAST ===== -->
-  <div id="toast" class="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 max-w-phone w-[88%] opacity-0 translate-y-3 pointer-events-none transition-all duration-300">
+  <div id="toast" class="fixed bottom-28 left-1/2 -translate-x-1/2 z-[90] max-w-phone w-[88%] opacity-0 translate-y-3 pointer-events-none transition-all duration-300">
     <div class="mx-auto w-fit max-w-full rounded-full bg-ink text-white text-[14px] font-medium px-5 py-3 shadow-lift text-center"></div>
   </div>
 
@@ -931,31 +931,34 @@ async function loadMyRooms(){
 
 async function createRoom(name){
   if(!SUPABASE_READY){ const room={id:'local',code:'LOCAL',name:(name||'운동방')}; myRooms=[room]; currentRoomId='local'; if(state){state.roomId='local';save();} return room; }
-  try{
-    await ensureUser();
-    const { data, error } = await sb.rpc('create_room', { p_name: name });
-    if(error) throw error;
-    if(!data || !data.length) throw new Error('빈 응답(설정 확인)');
-    const room = data[0];
-    myRooms.push(room); currentRoomId = room.id;
-    if(state){ state.roomId = room.id; save(); }
-    return room;
-  }catch(e){ console.warn('방 생성 실패', e); toast('방 생성 실패: '+(e.message||'설정 확인')); return null; }
+  await ensureUser();
+  const { data, error } = await sb.rpc('create_room', { p_name: name });
+  if(error) throw error;
+  if(!data || !data.length) throw new Error('빈 응답 (방 설정 SQL 확인)');
+  const room = data[0];
+  myRooms.push(room); currentRoomId = room.id;
+  if(state){ state.roomId = room.id; save(); }
+  return room;
 }
 
 async function joinRoom(code){
   if(!SUPABASE_READY){ const room={id:'local',code:(code||'LOCAL'),name:'운동방'}; myRooms=[room]; currentRoomId='local'; if(state){state.roomId='local';save();} return room; }
-  try{
-    await ensureUser();
-    const { data, error } = await sb.rpc('join_room', { p_code: code });
-    if(error) throw error;
-    if(!data || !data.length) return null;   // 없는 코드
-    const room = data[0];
-    if(!myRooms.some(r=>r.id===room.id)) myRooms.push(room);
-    currentRoomId = room.id;
-    if(state){ state.roomId = room.id; save(); }
-    return room;
-  }catch(e){ console.warn('참여 실패', e); toast('참여 실패: '+(e.message||'설정 확인')); return 'ERR'; }
+  await ensureUser();
+  const { data, error } = await sb.rpc('join_room', { p_code: code });
+  if(error) throw error;
+  if(!data || !data.length) return null;   // 없는 코드
+  const room = data[0];
+  if(!myRooms.some(r=>r.id===room.id)) myRooms.push(room);
+  currentRoomId = room.id;
+  if(state){ state.roomId = room.id; save(); }
+  return room;
+}
+
+// 방 화면(맨 앞 레이어) 위에 직접 에러 표시
+function showInviteError(msg){
+  const p = el('invError'); if(!p) return;
+  p.textContent = msg;
+  p.classList.remove('hidden');
 }
 
 async function leaveCurrentRoom(){
@@ -1378,18 +1381,23 @@ function init(){
     const btn = el('invSubmit');
     el('invError').classList.add('hidden');
     const orig = btn.textContent; btn.textContent = '…'; btn.disabled = true;
-    const res = await joinRoom(el('invCode').value);
-    btn.disabled = false; btn.textContent = orig;
-    if(res === 'ERR'){ /* 오류는 토스트로 이미 표시 */ }
-    else if(!res){ el('invError').classList.remove('hidden'); }
-    else afterRoomEnter();
+    try{
+      const res = await joinRoom(el('invCode').value);
+      if(!res) showInviteError('존재하지 않는 방 코드예요');
+      else afterRoomEnter();
+    }catch(e){
+      console.warn('참여 실패', e);
+      showInviteError('참여 실패: ' + (e.message || e));
+    }finally{
+      btn.disabled = false; btn.textContent = orig;
+    }
   }
   async function submitCreate(){
     const btn = el('createRoomBtn'), span = btn.querySelector('span');
     const orig = span.textContent; span.textContent = '만드는 중…'; btn.disabled = true;
-    const room = await createRoom(el('roomNameNew').value);
-    btn.disabled = false; span.textContent = orig;
-    if(room){
+    el('invError').classList.add('hidden');
+    try{
+      const room = await createRoom(el('roomNameNew').value);
       if(SUPABASE_READY){
         el('rcName').textContent = room.name;
         el('rcCode').textContent = room.code;
@@ -1402,6 +1410,11 @@ function init(){
       }else{
         afterRoomEnter();
       }
+    }catch(e){
+      console.warn('방 생성 실패', e);
+      showInviteError('방 생성 실패: ' + (e.message || e));
+    }finally{
+      btn.disabled = false; span.textContent = orig;
     }
   }
   el('invSubmit').onclick = submitJoin;
