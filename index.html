@@ -1398,19 +1398,30 @@ function fileToDataURL(file, maxW=900, q=0.82){
   });
 }
 
-/* 업로드용: 해상도 축소 + JPEG 압축 → Blob (보통 수백 KB) */
-function compressToBlob(file, maxW=800, quality=0.55){
+/* 업로드용: 해상도 축소 + JPEG 압축 → Blob
+   • maxEdge: 긴 변(가로/세로 중 큰 쪽) 기준으로 축소 → 세로 사진도 용량 안정
+   • targetKB: 결과가 이 용량을 넘으면 화질을 단계적으로 낮춰 재압축
+     → 디테일 많은 사진도 일정 용량 이하로 보장 (들쭉날쭉 방지) */
+function compressToBlob(file, maxEdge=800, quality=0.55, targetKB=120){
   return new Promise((resolve,reject)=>{
     const reader = new FileReader();
     reader.onload = e=>{
       const img = new Image();
       img.onload = ()=>{
-        const scale = Math.min(1, maxW/img.width);   // 원본보다 키우진 않음
+        const scale = Math.min(1, maxEdge/Math.max(img.width, img.height));  // 긴 변 기준 축소
         const canvas = document.createElement('canvas');
         canvas.width  = Math.round(img.width*scale);
         canvas.height = Math.round(img.height*scale);
         canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-        canvas.toBlob(b=> b?resolve(b):reject(new Error('압축 실패')), 'image/jpeg', quality);
+        // 목표 용량을 넘으면 화질을 0.1씩 낮춰 재압축 (최저 0.3까지)
+        const tryQ = q=>{
+          canvas.toBlob(b=>{
+            if(!b){ reject(new Error('압축 실패')); return; }
+            if(b.size/1024 > targetKB && q > 0.3) tryQ(Math.round((q-0.1)*100)/100);
+            else resolve(b);
+          }, 'image/jpeg', q);
+        };
+        tryQ(quality);
       };
       img.onerror = reject; img.src = e.target.result;
     };
