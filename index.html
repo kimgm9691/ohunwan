@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!--
+  오운완 (運動完) · 운동 인증 출석체크 웹앱
+  designed & built by GM
+  © 2025 GM. All rights reserved.
+-->
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -69,6 +74,15 @@
   @keyframes pr{ 0%,100%{box-shadow:0 0 0 0 rgba(168,230,43,.45)} 50%{box-shadow:0 0 0 7px rgba(168,230,43,0)} }
   ::-webkit-scrollbar{ display:none; }
   @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} }
+
+  /* ===== 넓은 화면에서 고정 오버레이가 잘리지 않도록 컨테이너 폭(430px)에 가둠 ===== */
+  /* fixed는 뷰포트 기준이라, 화면이 430px보다 넓으면 시트/탭/팝업이 중앙에서 어긋나 잘렸음.
+     모든 전체화면 오버레이(#app 안의 .fixed.inset-0)를 화면 중앙 430px 영역에 정렬 */
+  #app > .fixed.inset-0{
+    left:50% !important; right:auto !important;
+    transform:translateX(-50%);
+    width:100%; max-width:430px;
+  }
 </style>
 </head>
 
@@ -176,16 +190,15 @@
       <!-- 방 전환 칩 -->
       <div id="roomChips" class="flex gap-2 overflow-x-auto pb-1 mb-3 -mx-1 px-1"></div>
 
-      <!-- 현재 방 정보 + 코드 보기/복사 + 나가기 -->
+      <!-- 현재 방 정보 + 나가기 (코드는 노출하지 않음 — 내 정보 탭에서 방장만 확인) -->
       <div id="roomInfo" class="rounded-2xl bg-white shadow-soft p-3.5 mb-4 hidden">
         <div class="flex items-center gap-3">
           <div class="min-w-0 flex-1">
             <p id="roomName" class="font-extrabold text-[15px] truncate">—</p>
-            <p class="text-[12px] text-ink-500 mt-0.5">방 코드 <span id="roomCode" class="num font-bold text-volt-deep tracking-[0.12em]">—</span></p>
+            <p class="text-[12px] text-ink-500 mt-0.5">현재 보고 있는 방</p>
           </div>
           <button id="leaveRoomBtn" class="shrink-0 text-coral text-[13px] font-bold px-3 py-2 rounded-xl bg-coral/10 active:scale-95 transition">나가기</button>
         </div>
-        <button id="roomCodeBtn" class="w-full mt-2.5 rounded-xl bg-ink text-white text-[13px] font-bold py-2.5 active:scale-[.98] transition">📋 코드 복사해서 친구 초대하기</button>
       </div>
 
       <!-- 방이 하나도 없을 때 -->
@@ -221,6 +234,13 @@
         </div>
       </div>
 
+      <!-- 내가 만든 운동방 (방장에게만 코드 노출) -->
+      <div id="myRoomsCard" class="rounded-3xl bg-white p-5 shadow-soft hidden">
+        <h2 class="font-extrabold text-[17px] mb-1">내가 만든 운동방</h2>
+        <p class="text-[12px] text-ink-500 mb-3">코드는 방을 만든 나에게만 보여요. 친구에게 공유해 초대하세요.</p>
+        <div id="myRoomsList" class="space-y-2.5"></div>
+      </div>
+
       <!-- 뱃지 -->
       <div class="rounded-3xl bg-white p-5 shadow-soft">
         <div class="flex items-center justify-between mb-1">
@@ -236,6 +256,11 @@
         <h2 class="font-extrabold text-[17px] mb-3">최근 운동 기록</h2>
         <div id="recentLogs" class="space-y-2"></div>
       </div>
+
+      <!-- 개발자 크레딧 (작게 / 5번 탭하면 살짝 강조) -->
+      <p id="devCredit" class="text-center text-[10px] tracking-wide text-ink-500/40 select-none pt-1 pb-2 transition-colors">
+        오운완 · designed &amp; built by GM
+      </p>
     </section>
 
   </main>
@@ -474,6 +499,28 @@
 </div>
 
 <script>
+/* ===== 개발자 서명 (콘솔에 출력 / 숨은 크레딧) ===== */
+(function(){
+  try{
+    console.log('%c오운완 (運動完)', 'font:700 20px/1.4 sans-serif;color:#A8E62B');
+    console.log('%cdesigned & built by GM', 'font:500 12px sans-serif;color:#888');
+    // 화면 크레딧을 5번 탭하면 잠깐 또렷하게 (만든 사람 확인용 이스터에그)
+    document.addEventListener('DOMContentLoaded', function(){
+      var c = document.getElementById('devCredit'), n = 0, t;
+      if(!c) return;
+      c.addEventListener('click', function(){
+        n++; clearTimeout(t); t = setTimeout(function(){ n = 0; }, 1200);
+        if(n >= 5){
+          n = 0;
+          c.style.color = '#A8E62B';
+          c.textContent = '🛠️ made with 💪 by GM — 2025';
+          setTimeout(function(){ c.style.color = ''; }, 2500);
+        }
+      });
+    });
+  }catch(_){}
+})();
+
 /* ===================== Supabase 설정 ===================== */
 /* 1) 아래 두 값을 Supabase 대시보드 > Settings > API 에서 복사해 채우세요.
    2) 채우기 전에는 서버 기능이 자동으로 꺼지고, 앱은 로컬(localStorage)로만 정상 동작합니다.
@@ -891,8 +938,40 @@ function renderRoomUI(){
   if(cur){
     info.classList.remove('hidden');
     el('roomName').textContent = cur.name;
-    el('roomCode').textContent = cur.code;
   }else info.classList.add('hidden');
+}
+
+// HTML 삽입용 간단 escape (방 이름 등 사용자 입력 보호)
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// 방장 여부: 서버가 is_owner를 주면 그것을 우선, 없으면 이 기기에서 만든 방 기록으로 판단
+function isRoomOwner(r){
+  if(typeof r.is_owner === 'boolean') return r.is_owner;
+  return !!(state && Array.isArray(state.createdRoomIds) && state.createdRoomIds.includes(r.id));
+}
+
+// 내 정보 탭: 내가 만든 방의 코드만 노출 (방장만 코드 확인·복사)
+function renderOwnedRooms(){
+  const card = el('myRoomsCard'), list = el('myRoomsList');
+  if(!card || !list) return;
+  const owned = (SUPABASE_READY && state)
+    ? myRooms.filter(r => r.code && isRoomOwner(r))
+    : [];
+  if(!owned.length){ card.classList.add('hidden'); list.innerHTML=''; return; }
+  card.classList.remove('hidden');
+  list.innerHTML = owned.map(r=>`
+    <div class="rounded-2xl bg-bg p-3.5 flex items-center justify-between gap-3">
+      <div class="min-w-0">
+        <p class="font-bold text-[14px] truncate">${esc(r.name)}</p>
+        <p class="text-[12px] text-ink-500 mt-0.5">방 코드 <span class="num font-extrabold text-volt-deep tracking-[0.12em]">${esc(r.code)}</span></p>
+      </div>
+      <button class="ownedCopyBtn shrink-0 rounded-xl bg-ink text-white text-[13px] font-bold px-4 py-2.5 active:scale-95 transition" data-code="${esc(r.code)}">복사</button>
+    </div>`).join('');
+  list.querySelectorAll('.ownedCopyBtn').forEach(b=>b.onclick=()=>{
+    const code=b.dataset.code;
+    if(navigator.clipboard) navigator.clipboard.writeText(code).then(()=>toast('코드를 복사했어요'), ()=>toast('코드: '+code));
+    else toast('코드: '+code);
+  });
 }
 
 function selectRoom(id){
@@ -918,6 +997,7 @@ async function loadMyRooms(){
     }
     await loadLeaderboard();
     renderRoomUI();
+    renderOwnedRooms();
   }catch(e){ console.warn('방 목록 불러오기 실패', e); }
 }
 
@@ -929,7 +1009,12 @@ async function createRoom(name){
   if(!data || !data.length) throw new Error('빈 응답 (방 설정 SQL 확인)');
   const room = data[0];
   myRooms.push(room); currentRoomId = room.id;
-  if(state){ state.roomId = room.id; save(); }
+  if(state){
+    state.roomId = room.id;
+    // 이 기기(=방장)에서 만든 방으로 표시 → 코드는 방장에게만 노출
+    state.createdRoomIds = Array.from(new Set([...(state.createdRoomIds||[]), room.id]));
+    save();
+  }
   return room;
 }
 
@@ -1001,7 +1086,7 @@ function renderRoadmap(){
   }).join('');
 }
 
-function renderAll(){ renderHeaderDate(); renderAvatars(); renderStats(); renderCalendar(); renderRanking(); renderBadges(); renderRecentLogs(); }
+function renderAll(){ renderHeaderDate(); renderAvatars(); renderStats(); renderCalendar(); renderRanking(); renderBadges(); renderRecentLogs(); renderOwnedRooms(); }
 
 /* ===================== 탭 전환 ===================== */
 function switchTab(tab){
@@ -1421,11 +1506,6 @@ function init(){
   // 랭킹 탭 방 버튼들
   el('leaveRoomBtn').onclick = leaveCurrentRoom;
   el('addRoomEmptyBtn').onclick = openAddRoom;
-  el('roomCodeBtn').onclick = ()=>{
-    const cur = myRooms.find(r=>r.id===currentRoomId); if(!cur) return;
-    if(navigator.clipboard) navigator.clipboard.writeText(cur.code).then(()=>toast('코드를 복사했어요'), ()=>toast('코드: '+cur.code));
-    else toast('코드: '+cur.code);
-  };
 
   // 헤더 '운동방' 버튼 → 방 허브(랭킹 탭)로 이동. 여기서 방 전환(칩) · 방 추가(+ 추가) 모두 가능
   el('hdrRoomsBtn').onclick = ()=>{ switchTab('ranking'); renderRoomUI(); if(SUPABASE_READY) loadLeaderboard(); };
