@@ -969,9 +969,11 @@ function renderRanking(){
   // 챔피언 카드
   const champ = list[0];
   const cl = levelOf(champ.count);
+  const topTie = list.filter(p=>p.count===champ.count).length;   // 1위 동점 인원수
+  const tie = (topTie>1 && champ.count>0);                        // 공동 1위 여부
   const champLabel = (SUPABASE_READY && !isCurrentMonth(viewMonth))
-    ? `👑 ${viewMonth.getMonth()+1}월 1위 (최종)`
-    : '👑 이 달의 1위';
+    ? `👑 ${viewMonth.getMonth()+1}월 ${tie?'공동 ':''}1위 (최종)`
+    : `👑 이 달의 ${tie?'공동 ':''}1위`;
   el('champCard').innerHTML = `
     <div class="absolute -top-10 -right-8 w-32 h-32 rounded-full bg-gold/25 blur-2xl"></div>
     <div class="relative shrink-0 w-16 h-16 rounded-2xl overflow-hidden ring-2 ring-gold">
@@ -979,14 +981,17 @@ function renderRanking(){
     </div>
     <div class="relative min-w-0 flex-1">
       <p class="text-gold text-[12px] font-bold tracking-wide">${champLabel}</p>
-      <p class="text-xl font-extrabold truncate">${champ.name}${champ.me?' (나)':''}</p>
+      <p class="text-xl font-extrabold truncate">${champ.name}${champ.me?' (나)':''}${tie?` 외 ${topTie-1}명`:''}</p>
       <p class="text-white/55 text-[13px]">Lv.${cl.lv} · ${cl.name}</p>
     </div>
     <p class="relative num text-2xl font-extrabold text-volt">${champ.count}<span class="text-[12px] text-white/50 ml-0.5">회</span></p>`;
 
-  // 리스트
+  // 리스트 — 동점은 공동 등수(1·1·3 방식: 다음 등수는 인원수만큼 건너뜀)
+  let _prevCount = null, _prevRank = 0;
   el('rankList').innerHTML = list.map((p,i)=>{
-    const r=i+1, L=levelOf(p.count);
+    const r = (p.count === _prevCount) ? _prevRank : (i+1);
+    _prevRank = r; _prevCount = p.count;
+    const L = levelOf(p.count);
     const badge = r===1?'👑':r===2?'🥈':r===3?'🥉':`<span class="num text-ink-500 font-bold">${r}</span>`;
     return `<div class="flex items-center gap-3 rounded-2xl p-3 shadow-soft ${p.me?'bg-ink text-white':'bg-white'}">
       <div class="w-7 text-center text-[15px]">${badge}</div>
