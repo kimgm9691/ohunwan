@@ -931,26 +931,31 @@ async function loadMyRooms(){
 
 async function createRoom(name){
   if(!SUPABASE_READY){ const room={id:'local',code:'LOCAL',name:(name||'운동방')}; myRooms=[room]; currentRoomId='local'; if(state){state.roomId='local';save();} return room; }
-  await ensureUser();
-  const { data, error } = await sb.rpc('create_room', { p_name: name });
-  if(error || !data || !data.length){ console.warn('방 생성 실패', error); toast('방 생성 실패 — Supabase 방 설정(SQL)을 실행했는지 확인하세요'); return null; }
-  const room = data[0];
-  myRooms.push(room); currentRoomId = room.id;
-  if(state){ state.roomId = room.id; save(); }
-  return room;
+  try{
+    await ensureUser();
+    const { data, error } = await sb.rpc('create_room', { p_name: name });
+    if(error) throw error;
+    if(!data || !data.length) throw new Error('빈 응답(설정 확인)');
+    const room = data[0];
+    myRooms.push(room); currentRoomId = room.id;
+    if(state){ state.roomId = room.id; save(); }
+    return room;
+  }catch(e){ console.warn('방 생성 실패', e); toast('방 생성 실패: '+(e.message||'설정 확인')); return null; }
 }
 
 async function joinRoom(code){
   if(!SUPABASE_READY){ const room={id:'local',code:(code||'LOCAL'),name:'운동방'}; myRooms=[room]; currentRoomId='local'; if(state){state.roomId='local';save();} return room; }
-  await ensureUser();
-  const { data, error } = await sb.rpc('join_room', { p_code: code });
-  if(error){ console.warn('참여 실패', error); return null; }
-  if(!data || !data.length) return null;   // 없는 코드
-  const room = data[0];
-  if(!myRooms.some(r=>r.id===room.id)) myRooms.push(room);
-  currentRoomId = room.id;
-  if(state){ state.roomId = room.id; save(); }
-  return room;
+  try{
+    await ensureUser();
+    const { data, error } = await sb.rpc('join_room', { p_code: code });
+    if(error) throw error;
+    if(!data || !data.length) return null;   // 없는 코드
+    const room = data[0];
+    if(!myRooms.some(r=>r.id===room.id)) myRooms.push(room);
+    currentRoomId = room.id;
+    if(state){ state.roomId = room.id; save(); }
+    return room;
+  }catch(e){ console.warn('참여 실패', e); toast('참여 실패: '+(e.message||'설정 확인')); return 'ERR'; }
 }
 
 async function leaveCurrentRoom(){
@@ -1373,10 +1378,11 @@ function init(){
     const btn = el('invSubmit');
     el('invError').classList.add('hidden');
     const orig = btn.textContent; btn.textContent = '…'; btn.disabled = true;
-    const room = await joinRoom(el('invCode').value);
+    const res = await joinRoom(el('invCode').value);
     btn.disabled = false; btn.textContent = orig;
-    if(room) afterRoomEnter();
-    else el('invError').classList.remove('hidden');
+    if(res === 'ERR'){ /* 오류는 토스트로 이미 표시 */ }
+    else if(!res){ el('invError').classList.remove('hidden'); }
+    else afterRoomEnter();
   }
   async function submitCreate(){
     const btn = el('createRoomBtn'), span = btn.querySelector('span');
