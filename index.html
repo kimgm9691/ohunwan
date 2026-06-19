@@ -82,9 +82,15 @@
         <p class="num text-[11px] font-semibold tracking-[0.18em] text-volt-deep">오운완</p>
         <p id="headerDate" class="num text-[12px] font-medium text-ink-500 mt-0.5"></p>
       </div>
-      <button id="hdrAvatarBtn" class="w-10 h-10 rounded-full overflow-hidden ring-2 ring-volt grid place-items-center bg-ink/5 active:scale-95 transition">
-        <img id="hdrAvatar" alt="내 아바타" class="w-full h-full object-cover">
-      </button>
+      <div class="flex items-center gap-2">
+        <button id="hdrRoomsBtn" class="hidden items-center gap-1.5 rounded-full bg-white pl-2.5 pr-3 py-2 shadow-soft active:scale-95 transition" aria-label="운동방">
+          <svg width="18" height="18" fill="none" stroke="#16181D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 9 6l6 4.5"/><path d="M4.5 9.5V15h9V9.5"/></svg>
+          <span class="text-[12px] font-extrabold text-ink-700">운동방</span>
+        </button>
+        <button id="hdrAvatarBtn" class="w-10 h-10 rounded-full overflow-hidden ring-2 ring-volt grid place-items-center bg-ink/5 active:scale-95 transition">
+          <img id="hdrAvatar" alt="내 아바타" class="w-full h-full object-cover">
+        </button>
+      </div>
     </div>
   </header>
 
@@ -170,13 +176,16 @@
       <!-- 방 전환 칩 -->
       <div id="roomChips" class="flex gap-2 overflow-x-auto pb-1 mb-3 -mx-1 px-1"></div>
 
-      <!-- 현재 방 정보 + 나가기 -->
-      <div id="roomInfo" class="rounded-2xl bg-white shadow-soft p-3.5 mb-4 flex items-center gap-3 hidden">
-        <div class="min-w-0 flex-1">
-          <p id="roomName" class="font-extrabold text-[15px] truncate">—</p>
-          <button id="roomCodeBtn" class="num text-[12px] text-ink-500 mt-0.5 active:opacity-60">코드 <span id="roomCode" class="font-bold text-volt-deep">—</span> · 탭해서 복사</button>
+      <!-- 현재 방 정보 + 코드 보기/복사 + 나가기 -->
+      <div id="roomInfo" class="rounded-2xl bg-white shadow-soft p-3.5 mb-4 hidden">
+        <div class="flex items-center gap-3">
+          <div class="min-w-0 flex-1">
+            <p id="roomName" class="font-extrabold text-[15px] truncate">—</p>
+            <p class="text-[12px] text-ink-500 mt-0.5">방 코드 <span id="roomCode" class="num font-bold text-volt-deep tracking-[0.12em]">—</span></p>
+          </div>
+          <button id="leaveRoomBtn" class="shrink-0 text-coral text-[13px] font-bold px-3 py-2 rounded-xl bg-coral/10 active:scale-95 transition">나가기</button>
         </div>
-        <button id="leaveRoomBtn" class="shrink-0 text-coral text-[13px] font-bold px-3 py-2 rounded-xl bg-coral/10 active:scale-95 transition">나가기</button>
+        <button id="roomCodeBtn" class="w-full mt-2.5 rounded-xl bg-ink text-white text-[13px] font-bold py-2.5 active:scale-[.98] transition">📋 코드 복사해서 친구 초대하기</button>
       </div>
 
       <!-- 방이 하나도 없을 때 -->
@@ -375,23 +384,6 @@
       <h2 class="text-white text-[30px] font-extrabold mt-3">오운완 축하해요!</h2>
       <p id="celebEx" class="text-volt text-[15px] font-semibold mt-1.5"></p>
       <p class="text-white/50 text-[13px] mt-4">오늘도 정말 멋져요 💪</p>
-    </div>
-  </div>
-
-  <!-- ===== 방 생성 완료 (코드 안내) ===== -->
-  <div id="roomCreated" class="fixed inset-0 z-[85] hidden grid place-items-center px-8">
-    <div class="absolute inset-0 bg-ink/60 backdrop-blur-sm"></div>
-    <div class="relative bg-white rounded-3xl p-7 w-full max-w-[340px] text-center shadow-lift">
-      <div class="text-[40px] leading-none">🎉</div>
-      <h2 class="text-[20px] font-extrabold mt-2">방이 만들어졌어요!</h2>
-      <p class="text-[13px] text-ink-500 mt-1" id="rcName">—</p>
-      <div class="mt-4 rounded-2xl bg-bg p-4">
-        <p class="text-[12px] text-ink-500 mb-1">방 코드</p>
-        <p class="num text-[30px] font-extrabold tracking-[0.18em] text-volt-deep" id="rcCode">—</p>
-      </div>
-      <p class="text-[12px] text-ink-500 mt-3 leading-relaxed">이 코드를 친구에게 공유하면<br>같은 방 랭킹에 모여요.</p>
-      <button id="rcCopy" class="w-full mt-4 rounded-2xl bg-ink text-white font-bold py-3.5 active:scale-[.98] transition">코드 복사하기</button>
-      <button id="rcContinue" class="w-full mt-2 rounded-2xl bg-volt text-ink font-extrabold py-3.5 active:scale-[.98] transition">확인</button>
     </div>
   </div>
 
@@ -891,7 +883,7 @@ function renderRoomUI(){
   chips.innerHTML = myRooms.map(r=>{
     const on = r.id===currentRoomId;
     return `<button data-room="${r.id}" class="roomChip shrink-0 px-3.5 py-2 rounded-full text-[13px] font-bold transition ${on?'bg-ink text-white':'bg-white text-ink-500 shadow-soft'}">${r.name}</button>`;
-  }).join('') + `<button id="addRoomBtn" class="shrink-0 px-3.5 py-2 rounded-full text-[13px] font-bold bg-volt-soft text-volt-deep">+ 추가</button>`;
+  }).join('') + `<button id="addRoomBtn" class="shrink-0 px-3.5 py-2 rounded-full text-[13px] font-bold bg-volt-soft text-volt-deep">＋ 방 추가</button>`;
   chips.querySelectorAll('.roomChip').forEach(b=>b.onclick=()=>selectRoom(b.dataset.room));
   const add=el('addRoomBtn'); if(add) add.onclick=openAddRoom;
   // 현재 방 정보
@@ -1020,6 +1012,14 @@ function switchTab(tab){
     b.style.color = (b.dataset.tab===tab) ? '#A8E62B' : '';
   });
   window.scrollTo(0,0);
+}
+
+// 헤더 '운동방' 버튼은 로그인(state 존재) + 서버 연동 시에만 노출
+function updateHeaderRooms(){
+  const btn = el('hdrRoomsBtn'); if(!btn) return;
+  const show = !!(state && SUPABASE_READY);
+  btn.classList.toggle('hidden', !show);
+  btn.classList.toggle('flex', show);
 }
 
 /* ===================== 운동 종목 선택 그리드 ===================== */
@@ -1261,6 +1261,7 @@ function startApp(){
   save();
   el('onboard').classList.add('hidden');
   renderAll(); switchTab('home');
+  updateHeaderRooms();
 
   // 새 프로필을 서버에 동기화 + 랭킹/실시간 시작
   if(SUPABASE_READY){
@@ -1344,6 +1345,7 @@ function init(){
     if(el('invCancel')) el('invCancel').classList.add('hidden');
     checkObReady();
     window.scrollTo(0,0);
+    updateHeaderRooms();
     toast('전체 초기화 완료 — 처음부터 시작해요');
   };
 
@@ -1398,18 +1400,12 @@ function init(){
     el('invError').classList.add('hidden');
     try{
       const room = await createRoom(el('roomNameNew').value);
-      if(SUPABASE_READY){
-        el('rcName').textContent = room.name;
-        el('rcCode').textContent = room.code;
-        el('rcCopy').onclick = ()=>{
-          if(navigator.clipboard) navigator.clipboard.writeText(room.code).then(()=>toast('코드를 복사했어요'), ()=>toast('코드: '+room.code));
-          else toast('코드: '+room.code);
-        };
-        el('rcContinue').onclick = ()=>{ el('roomCreated').classList.add('hidden'); afterRoomEnter(); };
-        el('roomCreated').classList.remove('hidden');
-      }else{
-        afterRoomEnter();
+      // 방장은 바로 입장. 코드는 토스트로 한 번 알려주고,
+      // 이후 랭킹 탭의 방 정보 카드에서 언제든 다시 보고 복사할 수 있음
+      if(SUPABASE_READY && room && room.code){
+        toast(`'${room.name}' 방 생성 완료 · 코드 ${room.code}`);
       }
+      afterRoomEnter();
     }catch(e){
       console.warn('방 생성 실패', e);
       showInviteError('방 생성 실패: ' + (e.message || e));
@@ -1431,6 +1427,9 @@ function init(){
     else toast('코드: '+cur.code);
   };
 
+  // 헤더 '운동방' 버튼 → 방 허브(랭킹 탭)로 이동. 여기서 방 전환(칩) · 방 추가(+ 추가) 모두 가능
+  el('hdrRoomsBtn').onclick = ()=>{ switchTab('ranking'); renderRoomUI(); if(SUPABASE_READY) loadLeaderboard(); };
+
   // 시작
   state = load();
   if(state){
@@ -1442,6 +1441,7 @@ function init(){
     el('invite').classList.remove('hidden');
     el('onboard').classList.add('hidden');
   }
+  updateHeaderRooms();
 
   // Supabase 서버 연동 시작 (키가 채워져 있을 때만 동작)
   if(SUPABASE_READY){
