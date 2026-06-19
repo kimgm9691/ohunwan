@@ -99,6 +99,21 @@
     transform:translateX(-50%) !important;
     width:100%; max-width:430px;
   }
+
+  /* ===== 당겨서 새로고침 (Pull to Refresh) =====
+     standalone PWA는 브라우저 기본 새로고침이 없어 직접 구현.
+     overscroll-behavior로 브라우저 기본 당김 동작은 막고, 아래 인디케이터로 대체 */
+  html, body{ overscroll-behavior-y: contain; }
+  #ptr{
+    position:fixed; top:0; left:50%; width:38px; height:38px; margin-left:-19px;
+    display:grid; place-items:center; border-radius:50%; background:#fff;
+    box-shadow:0 6px 18px -6px rgba(22,24,29,.35);
+    z-index:40; pointer-events:none;
+    transform:translateY(-60px); opacity:0;
+  }
+  #ptr svg{ width:20px; height:20px; color:#A8E62B; }
+  #ptr.spin svg{ animation:ptrspin .7s linear infinite; }
+  @keyframes ptrspin{ to{ transform:rotate(360deg); } }
 </style>
 </head>
 
@@ -1802,6 +1817,93 @@ function init(){
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+/* ===================== 당겨서 새로고침 ===================== */
+/* 화면 맨 위에서 아래로 당기면 서버 데이터(방·랭킹)와 내 기록을 다시 불러온다.
+   오버레이(온보딩/시트/팝업 등)가 열려 있거나 스크롤이 맨 위가 아니면 동작 안 함. */
+(function setupPullToRefresh(){
+  const TRIGGER = 56;   // 이 거리(저항 적용 후) 이상 당기면 새로고침
+  const MAX     = 80;   // 인디케이터가 내려오는 최대치
+  let startY = 0, p = 0, pulling = false, refreshing = false;
+
+  // 인디케이터(회전 화살표) 생성
+  const ind = document.createElement('div');
+  ind.id = 'ptr';
+  ind.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg>';
+  document.body.appendChild(ind);
+
+  // 전체화면/시트/팝업이 하나라도 열려 있으면 당겨서 새로고침 비활성
+  function overlayOpen(){
+    return ['onboard','invite','roomsHub','sheet','checkinSheet','levelPop',
+            'monthPop','roadmapPop','celebrate','roomCodePop']
+      .some(id=>{ const e=document.getElementById(id); return e && !e.classList.contains('hidden'); });
+  }
+
+  function moveTo(y, op){
+    ind.style.transform = 'translateY('+y+'px)';
+    ind.style.opacity = op;
+  }
+  function reset(){
+    ind.style.transition = 'transform .25s ease, opacity .25s ease';
+    moveTo(-60, 0);
+  }
+
+  async function refreshData(){
+    if(SUPABASE_READY){
+      try{
+        await ensureUser();
+        if(state) await syncProfile();
+        await loadMyRooms();   // 방 목록 + 랭킹 다시 불러오기
+      }catch(e){ console.warn('새로고침 실패', e); }
+    }
+    renderAll();               // 내 기록·통계·캘린더 다시 그리기
+  }
+
+  async function doRefresh(){
+    refreshing = true;
+    ind.style.transition = 'transform .25s ease, opacity .25s ease';
+    moveTo(22, 1);
+    ind.classList.add('spin');
+    if(navigator.vibrate) navigator.vibrate(10);
+    const started = Date.now();
+    await refreshData();
+    const wait = Math.max(0, 600 - (Date.now()-started));  // 스피너 최소 노출
+    setTimeout(()=>{
+      ind.classList.remove('spin');
+      reset();
+      toast('최신 기록으로 업데이트했어요');
+      setTimeout(()=>{ refreshing = false; }, 260);
+    }, wait);
+  }
+
+  window.addEventListener('touchstart', e=>{
+    if(refreshing || !state) return;
+    if(e.touches.length !== 1) return;
+    if(window.scrollY > 0 || overlayOpen()) return;
+    startY = e.touches[0].clientY;
+    pulling = true; p = 0;
+    ind.style.transition = 'none';
+  }, {passive:true});
+
+  window.addEventListener('touchmove', e=>{
+    if(!pulling || refreshing) return;
+    const raw = e.touches[0].clientY - startY;
+    if(raw <= 0 || window.scrollY > 0){ pulling = false; reset(); return; }
+    p = Math.min(MAX, raw * 0.5);                       // 당길수록 저항
+    const y = -60 + Math.min(p + 38, 82);              // 위(-60)에서 아래로 내려옴
+    moveTo(y, Math.min(1, p/30));
+    ind.querySelector('svg').style.transform = 'rotate('+Math.min(360, p/TRIGGER*360)+'deg)';
+  }, {passive:true});
+
+  window.addEventListener('touchend', ()=>{
+    if(!pulling) return;
+    pulling = false;
+    ind.querySelector('svg').style.transform = '';
+    if(p >= TRIGGER && !refreshing) doRefresh();
+    else reset();
+    p = 0;
+  });
+})();
 
 // PWA: 서비스워커 등록 (https 또는 localhost에서만 동작 — file://에서는 자동 무시)
 if('serviceWorker' in navigator){
