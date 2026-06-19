@@ -566,6 +566,7 @@ let _rankSubscribed = false;
 let myRooms = [];            // 내가 속한 방 [{id, code, name}]
 let currentRoomId = null;    // 현재 보고 있는 방
 let inviteMode = 'gate';     // 'gate'(가입 전) | 'add'(이미 가입한 사용자가 방 추가)
+let pendingOwnedRoomIds = []; // 온보딩 전에 방장으로 만든 방 ID 임시 보관 → startApp에서 state로 이관
 
 /* ===================== 초대코드 검증 =====================
    서버가 연결돼 있으면 invite_codes 테이블을 RPC(redeem_invite)로 확인합니다.
@@ -1063,9 +1064,11 @@ async function createRoom(name){
   if(!data || !data.length) throw new Error('빈 응답 (방 설정 SQL 확인)');
   const room = data[0];
   myRooms.push(room); currentRoomId = room.id;
+  // 이 기기(=방장)에서 만든 방으로 표시 → 코드는 방장에게만 노출.
+  // 온보딩 전에는 state가 아직 없으므로 임시 변수에 보관해 두고 startApp에서 이관한다.
+  pendingOwnedRoomIds = Array.from(new Set([...pendingOwnedRoomIds, room.id]));
   if(state){
     state.roomId = room.id;
-    // 이 기기(=방장)에서 만든 방으로 표시 → 코드는 방장에게만 노출
     state.createdRoomIds = Array.from(new Set([...(state.createdRoomIds||[]), room.id]));
     save();
   }
@@ -1397,7 +1400,17 @@ function checkObReady(){
 }
 function startApp(){
   if(!checkObReady()){ toast('닉네임과 캐릭터(또는 사진)를 선택해주세요'); return; }
-  state = { name: el('obName').value.trim(), photo: obPhoto, avatar: obPhoto?null:obAvatar, char: obChar, joined: new Date().getFullYear(), logs: [] };
+  state = {
+    name: el('obName').value.trim(),
+    photo: obPhoto,
+    avatar: obPhoto?null:obAvatar,
+    char: obChar,
+    joined: new Date().getFullYear(),
+    roomId: currentRoomId || null,
+    // 온보딩 전에 방장으로 만든 방을 이관 → 코드 노출(방장 판별)이 유지됨
+    createdRoomIds: Array.from(new Set(pendingOwnedRoomIds)),
+    logs: []
+  };
   save();
   el('onboard').classList.add('hidden');
   renderAll(); switchTab('home');
@@ -1470,7 +1483,7 @@ function init(){
     if(!confirm('프로필·기록을 포함한 모든 데이터를 삭제하고 온보딩부터 다시 시작할까요?')) return;
     try{ localStorage.removeItem(KEY); }catch(e){}
     state = null;
-    myRooms = []; currentRoomId = null; inviteMode = 'gate';
+    myRooms = []; currentRoomId = null; inviteMode = 'gate'; pendingOwnedRoomIds = [];
     // 입력 폼·온보딩 선택값 초기화
     obPhoto=null; obChar='m'; obAvatar=null;
     if(el('obName')) el('obName').value='';
@@ -1542,10 +1555,11 @@ function init(){
     el('invError').classList.add('hidden');
     try{
       const room = await createRoom(el('roomNameNew').value);
-      // 방장은 바로 입장. 코드는 토스트로 한 번 알려주고,
-      // 이후 '운동방' 허브의 방 카드에서 언제든 다시 보고 복사할 수 있음
+      // 방장은 바로 입장. 코드는 토스트로 알려주고, 가입 후에는 '운동방' 화면의
+      // 방 카드에서 언제든 다시 보고 복사할 수 있음 (방장에게만 노출)
       if(SUPABASE_READY && room && room.code){
-        toast(`'${room.name}' 방 생성 완료 · 코드 ${room.code}`);
+        const where = (inviteMode === 'add') ? '' : ' · 가입 후 운동방에서 다시 볼 수 있어요';
+        toast(`'${room.name}' 코드 ${room.code}${where}`);
       }
       afterRoomEnter();
     }catch(e){
