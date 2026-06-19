@@ -710,6 +710,7 @@ const BADGES = [
   { id:'streak7', icon:'⚡', name:'일주일 챌린지', cond:'7일 연속 인증',        check:s=>maxStreak(s)>=7 },
   { id:'weekend', icon:'🛡️', name:'주말 전사',   cond:'주말(토·일)에 인증',    check:s=>s.logs.some(l=>{const d=new Date(l.date).getDay();return d===0||d===6;}) },
   { id:'endure',  icon:'⏱️', name:'지구력왕',     cond:'한 번에 60분 이상 운동', check:s=>s.logs.some(l=>{const m=durMin(l.start,l.end);return m!=null&&m>=60;}) },
+  { id:'champ',   icon:'👑', name:'월간 챔피언', cond:'한 달 운동방 1등 달성',  check:s=>((s.monthlyWins||0)>=1) },
 ];
 
 const FRIENDS = [
@@ -1059,6 +1060,16 @@ async function maybeShowMonthlyPopup(){
     });
     if(error) return;        // 월별 함수(SQL) 추가 전 → 기록 안 남기고 다음 방문에 재시도
     const top = (data||[]).filter(r=>r.count>0).sort((a,b)=>b.count-a.count).slice(0,3);
+    // 지난달 1등이 나였으면 '월간 챔피언' 뱃지 적립 (달 단위로 중복 적립 방지)
+    if(top.length && top[0].user_id === currentUserId){
+      const lastKey = monthKey(lastFirst);
+      const won = state.monthlyWinMonths || [];
+      if(!won.includes(lastKey)){
+        state.monthlyWinMonths = [...won, lastKey];
+        state.monthlyWins = (state.monthlyWins||0) + 1;
+        renderBadges();                            // 새 뱃지 즉시 반영
+      }
+    }
     state.lastSeenRankMonth = thisKey; save();   // 정상 조회 → 이번 달은 다시 안 띄움
     if(!top.length) return;                       // 지난달 기록이 없으면 표시 생략
     const room = myRooms.find(r=>r.id===currentRoomId);
@@ -1263,6 +1274,23 @@ async function leaveRoom(id, name){
     // 나간 방이 현재 보던 방이면 다른 방으로 이동
     if(currentRoomId===id) currentRoomId = myRooms.length ? myRooms[0].id : null;
     if(state){ state.roomId = currentRoomId; save(); }
+    // 남은 방이 하나도 없으면: 허브를 닫고 초대코드 게이트로 되돌림
+    if(!myRooms.length){
+      closeRoomsHub();
+      serverRanking = [];
+      inviteMode = 'gate';
+      if(el('invCode')) el('invCode').value='';
+      if(el('roomNameNew')) el('roomNameNew').value='';
+      if(el('invError')) el('invError').classList.add('hidden');
+      if(el('invCancel')) el('invCancel').classList.add('hidden');
+      el('invite').classList.remove('hidden');
+      window.scrollTo(0,0);
+      renderRankRoomBar();
+      renderRanking();
+      updateHeaderRooms();
+      toast('방에서 나갔어요');
+      return;
+    }
     await loadLeaderboard();
     renderRankRoomBar();
     renderRoomsHub();
@@ -1367,7 +1395,7 @@ function fileToDataURL(file, maxW=900, q=0.82){
 }
 
 /* 업로드용: 해상도 축소 + JPEG 압축 → Blob (보통 수백 KB) */
-function compressToBlob(file, maxW=1080, quality=0.65){
+function compressToBlob(file, maxW=800, quality=0.55){
   return new Promise((resolve,reject)=>{
     const reader = new FileReader();
     reader.onload = e=>{
@@ -1426,6 +1454,42 @@ async function uploadAndRecord(file, { category, workout_name, duration }){
   });
   if(insErr) throw insErr;
   return publicUrl;
+}
+
+/* 프로필 사진을 Storage(profiles/ 경로)에 압축 업로드 → 공개 URL 반환.
+   온보딩 사진은 정사각 작게(maxW=400)로 더 압축해 용량을 아낀다.
+   실패하면 null을 반환해 호출부에서 dataURL로 폴백할 수 있게 한다. */
+async function uploadProfilePhoto(file){
+  if(!SUPABASE_READY || !file) return null;
+  try{
+    const userId = await ensureUser();
+    const blob = await compressToBlob(file, 400, 0.7);
+    // 유저당 1장만 유지: 덮어쓰기(upsert)로 옛 사진을 교체
+    const path = `profiles/${userId}.jpg`;
+    const { error: upErr } = await sb.storage
+      .from('workout-attachments')
+      .upload(path, blob, { contentType:'image/jpeg', upsert:true });
+    if(upErr) throw upErr;
+    const { data:{ publicUrl } } = sb.storage
+      .from('workout-attachments').getPublicUrl(path);
+    // 캐시 무력화: 같은 경로를 덮어써도 새 사진이 보이도록 쿼리스트링 부여
+    return `${publicUrl}?v=${Date.now()}`;
+  }catch(e){
+    console.warn('프로필 사진 업로드 실패', e);
+    return null;
+  }
+}
+
+/* 기존 사용자 마이그레이션: state.photo가 base64(dataURL)면 Storage로 옮기고
+   URL로 교체한다. 이미 URL(http로 시작)이면 아무것도 하지 않는다. */
+async function migrateProfilePhoto(){
+  if(!SUPABASE_READY || !state || !state.photo) return;
+  if(!state.photo.startsWith('data:')) return;       // 이미 URL이면 패스
+  try{
+    const blob = await (await fetch(state.photo)).blob();
+    const url = await uploadProfilePhoto(blob);
+    if(url){ state.photo = url; save(); renderAll(); await syncProfile(); }
+  }catch(e){ console.warn('프로필 사진 마이그레이션 실패', e); }
 }
 
 async function submitCheckin(){
@@ -1522,7 +1586,7 @@ function showCelebrate(ex){
 }
 
 /* ===================== 온보딩 ===================== */
-let obPhoto=null, obChar='m', obAvatar=null;
+let obPhoto=null, obPhotoFile=null, obChar='m', obAvatar=null;
 function renderObGender(){
   const opts = [{c:'m',label:'남'},{c:'f',label:'여'}];
   el('obGender').innerHTML = opts.map(o=>{
@@ -1542,7 +1606,7 @@ function renderObAvatars(){
     </button>`;
   }).join('');
   document.querySelectorAll('.obAvatarBtn').forEach(b=>b.onclick=()=>{
-    obAvatar = b.dataset.av; obPhoto = null;        // 캐릭터 선택 시 업로드 사진 해제
+    obAvatar = b.dataset.av; obPhoto = null; obPhotoFile = null;  // 캐릭터 선택 시 업로드 사진 해제
     el('obPhotoPrev').innerHTML = '📷';
     el('obPhotoHint').textContent = '탭해서 갤러리에서 선택';
     renderObAvatars(); checkObReady();
@@ -1574,7 +1638,15 @@ function startApp(){
 
   // 새 프로필을 서버에 동기화 + 랭킹/실시간 시작
   if(SUPABASE_READY){
-    syncProfile().then(()=>{ loadMyRooms(); subscribeRanking(); });
+    (async ()=>{
+      // 사진을 골랐다면 Storage에 올리고 state.photo를 URL로 교체(용량 절약)
+      if(obPhotoFile){
+        const url = await uploadProfilePhoto(obPhotoFile);
+        if(url){ state.photo = url; save(); renderAll(); }
+      }
+      await syncProfile();
+      loadMyRooms(); subscribeRanking();
+    })();
   }
 }
 
@@ -1648,7 +1720,7 @@ function init(){
     state = null;
     myRooms = []; currentRoomId = null; inviteMode = 'gate'; pendingOwnedRoomIds = [];
     // 입력 폼·온보딩 선택값 초기화
-    obPhoto=null; obChar='m'; obAvatar=null;
+    obPhoto=null; obPhotoFile=null; obChar='m'; obAvatar=null;
     if(el('obName')) el('obName').value='';
     if(el('obPhotoPrev')) el('obPhotoPrev').innerHTML='📷';
     if(el('obPhotoHint')) el('obPhotoHint').textContent='탭해서 갤러리에서 선택';
@@ -1669,6 +1741,7 @@ function init(){
   el('obPhotoBtn').onclick = ()=>el('obPhoto').click();
   el('obPhoto').onchange = async e=>{
     const f=e.target.files[0]; if(!f) return;
+    obPhotoFile = f;                                 // 업로드용 원본 보관
     obPhoto = await fileToDataURL(f, 600, 0.85);
     obAvatar = null;                                 // 사진 업로드 시 캐릭터 선택 해제
     el('obPhotoPrev').innerHTML = `<img src="${obPhoto}" class="w-full h-full object-cover" alt="">`;
@@ -1779,7 +1852,7 @@ function init(){
   // Supabase 서버 연동 시작 (키가 채워져 있을 때만 동작)
   if(SUPABASE_READY){
     ensureUser()
-      .then(async ()=>{ if(state){ await syncProfile(); } await loadMyRooms(); subscribeRanking(); })
+      .then(async ()=>{ if(state){ await syncProfile(); await migrateProfilePhoto(); } await loadMyRooms(); subscribeRanking(); })
       .catch(e=>console.warn('Supabase 초기화 실패', e));
   }
 }
