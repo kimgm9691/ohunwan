@@ -6,7 +6,7 @@
 // ※ 업데이트할 때 이 파일은 보통 건드릴 필요 없습니다.
 //    혹시 캐시를 완전히 비우고 싶을 때만 아래 CACHE 버전(v2 → v3 ...)을 올리세요.
 
-const CACHE = 'oun-cache-v2';
+const CACHE = 'oun-cache-v3';
 
 // 설치되자마자 바로 활성화 (이전 워커가 끝날 때까지 기다리지 않음)
 self.addEventListener('install', (e) => {
