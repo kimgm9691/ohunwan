@@ -99,21 +99,6 @@
     transform:translateX(-50%) !important;
     width:100%; max-width:430px;
   }
-
-  /* ===== 당겨서 새로고침 (Pull to Refresh) =====
-     standalone PWA는 브라우저 기본 새로고침이 없어 직접 구현.
-     overscroll-behavior로 브라우저 기본 당김 동작은 막고, 아래 인디케이터로 대체 */
-  html, body{ overscroll-behavior-y: contain; }
-  #ptr{
-    position:fixed; top:0; left:50%; width:38px; height:38px; margin-left:-19px;
-    display:grid; place-items:center; border-radius:50%; background:#fff;
-    box-shadow:0 6px 18px -6px rgba(22,24,29,.35);
-    z-index:40; pointer-events:none;
-    transform:translateY(-60px); opacity:0;
-  }
-  #ptr svg{ width:20px; height:20px; color:#A8E62B; }
-  #ptr.spin svg{ animation:ptrspin .7s linear infinite; }
-  @keyframes ptrspin{ to{ transform:rotate(360deg); } }
 </style>
 </head>
 
@@ -176,6 +161,17 @@
       </button>
       <p id="homeTodayHint" class="text-center text-[13px] text-ink-500 -mt-1"></p>
 
+      <!-- 개발자/데모 도구 (배포 시 이 블록만 삭제하면 됩니다) -->
+      <details class="rounded-2xl bg-white/60 border border-line/70 px-4 py-3 text-ink-500">
+        <summary class="text-[12px] font-medium cursor-pointer select-none">🛠️ 데모 도구 (성장 로직 테스트)</summary>
+        <p class="text-[11px] mt-2 mb-2.5">인증을 빠르게 쌓아 레벨업 애니메이션을 확인할 수 있어요.</p>
+        <div class="grid grid-cols-3 gap-2">
+          <button class="demoAdd rounded-lg bg-bg border border-line py-2 text-[12px] font-semibold text-ink-700 active:scale-95 transition" data-n="1">+1회</button>
+          <button class="demoAdd rounded-lg bg-bg border border-line py-2 text-[12px] font-semibold text-ink-700 active:scale-95 transition" data-n="25">+25회</button>
+          <button id="demoReset" class="rounded-lg bg-bg border border-line py-2 text-[12px] font-semibold text-coral active:scale-95 transition">기록 초기화</button>
+        </div>
+        <button id="demoResetAll" class="mt-2 w-full rounded-lg bg-coral/10 border border-coral/40 py-2 text-[12px] font-bold text-coral active:scale-95 transition">⟲ 전체 초기화 (온보딩부터 다시)</button>
+      </details>
     </section>
 
     <!-- ============ CALENDAR ============ -->
@@ -258,6 +254,21 @@
         <div class="rounded-2xl bg-white p-3.5 shadow-soft text-center">
           <p class="num text-2xl font-bold text-coral" id="miStreak">0</p>
           <p class="text-[11px] text-ink-500 mt-0.5">연속 인증일</p>
+        </div>
+      </div>
+
+      <!-- 복구 코드 -->
+      <div class="rounded-3xl bg-white p-5 shadow-soft">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-[18px] leading-none">🔑</span>
+          <h2 class="font-extrabold text-[17px]">내 복구 코드</h2>
+        </div>
+        <p class="text-[12px] text-ink-500 mb-3 leading-relaxed">기기를 바꾸거나 로그아웃되면 이 코드로 계정을 되찾을 수 있어요. 꼭 메모해 두세요.</p>
+        <div class="flex gap-2">
+          <div class="flex-1 min-w-0 rounded-xl bg-bg px-4 py-3 grid place-items-center">
+            <p id="miReco" class="num text-[18px] font-extrabold tracking-[0.14em] truncate">--------</p>
+          </div>
+          <button id="miRecoCopy" class="shrink-0 rounded-xl bg-ink text-white font-bold text-[13px] px-4 active:scale-95 transition">복사</button>
         </div>
       </div>
 
@@ -462,6 +473,38 @@
     </div>
   </div>
 
+  <!-- ===== 복구 코드 안내 팝업 (가입 직후 1회 · 코드 저장 안내) ===== -->
+  <div id="recoPop" class="fixed inset-0 z-[88] hidden grid place-items-center px-8">
+    <div class="absolute inset-0 bg-ink/60 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-[320px] rounded-3xl bg-bg p-6 text-center pop">
+      <div class="text-[44px] leading-none">🔑</div>
+      <h2 id="recoPopTitle" class="text-[20px] font-extrabold mt-2">내 복구 코드예요</h2>
+      <p class="text-[12px] text-ink-500 mt-2 leading-relaxed">기기를 바꾸거나 로그아웃되면<br>이 코드로 <b>내 계정과 기록을 그대로</b> 되찾을 수 있어요.<br>꼭 메모해 두세요!</p>
+      <div class="mt-4 rounded-2xl bg-ink py-4">
+        <p id="recoPopCode" class="num text-volt text-[24px] font-extrabold tracking-[0.18em]">--------</p>
+      </div>
+      <button id="recoPopCopy" class="w-full mt-3 rounded-2xl bg-volt text-ink font-extrabold text-[15px] py-3.5 active:scale-[.98] transition">📋 복구 코드 복사</button>
+      <p class="text-[11px] text-ink-500 mt-3">이 코드는 나중에 <b>내 정보</b> 탭에서 다시 볼 수 있어요</p>
+      <button id="recoPopDone" class="mt-3 text-ink-500 text-[14px] font-semibold py-1">저장했어요</button>
+    </div>
+  </div>
+
+  <!-- ===== 복구 코드 입력 (로그아웃/기기변경 후 돌아오기) ===== -->
+  <div id="recoEnter" class="fixed inset-0 z-[88] hidden grid place-items-center px-8">
+    <div class="absolute inset-0 bg-ink/60 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-[320px] rounded-3xl bg-bg p-6 pop">
+      <div class="text-[40px] leading-none text-center">🔑</div>
+      <h2 class="text-[19px] font-extrabold mt-2 text-center">복구 코드로 돌아오기</h2>
+      <p class="text-[12px] text-ink-500 mt-1.5 mb-4 text-center leading-relaxed">예전에 받은 복구 코드를 입력하면<br>이전 계정과 기록을 그대로 불러와요.</p>
+      <input id="recIn" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"
+        placeholder="예: GM-7K2P-9QF4"
+        class="num w-full rounded-xl bg-ink/5 px-4 py-3.5 text-[16px] font-semibold tracking-[0.1em] uppercase outline-none focus:bg-ink/10 transition text-center">
+      <p id="recErr" class="text-coral text-[12px] font-medium mt-2 text-center hidden">복구 코드를 찾을 수 없어요</p>
+      <button id="recSubmit" class="w-full mt-3 rounded-2xl bg-volt text-ink font-extrabold text-[15px] py-3.5 active:scale-[.98] transition">계정 불러오기</button>
+      <button id="recCancel" class="w-full mt-2 text-ink-500 text-[14px] font-semibold py-1.5">취소</button>
+    </div>
+  </div>
+
   <!-- ===== 운동방 허브 (내가 가입한 방 목록 · 헤더 '운동방' 버튼으로 진입) ===== -->
   <div id="roomsHub" class="fixed inset-0 z-[75] bg-bg overflow-y-auto hidden">
     <div class="min-h-full max-w-phone mx-auto flex flex-col px-6 pt-[max(env(safe-area-inset-top),20px)] pb-10">
@@ -524,6 +567,11 @@
           <span class="block w-full rounded-2xl bg-white/10 text-white font-extrabold text-[16px] py-4 active:scale-[.98] transition border border-white/15">+ 방 만들고 코드 받기</span>
         </button>
       </div>
+
+      <!-- 이미 써본 사람: 복구 코드로 돌아오기 -->
+      <button id="invRecover" class="mt-7 text-white/55 text-[13px] font-semibold underline underline-offset-4 decoration-white/25 active:text-white transition">
+        이미 써봤어요 · 복구 코드로 돌아오기
+      </button>
 
       <!-- 추가 모드(이미 가입된 사용자가 방을 더할 때)에서만 보이는 닫기 -->
       <button id="invCancel" class="mt-auto pt-6 text-white/40 text-[14px] font-semibold hidden">닫기</button>
@@ -657,8 +705,124 @@ async function syncProfile(){
       gender: state.char || 'm',
       avatar_id: state.avatar || null,
       profile_src: state.photo || null,
+      recovery_code: state.recovery || null,
     });
   }catch(e){ console.warn('프로필 동기화 실패', e); }
+}
+
+/* ===================== 계정 복구 (복구 코드) ===================== */
+// 헷갈리는 문자(0/O/1/I/L) 제외한 안전한 알파벳으로 GM-XXXX-XXXX 코드 생성
+function genRecoveryCode(){
+  const ALPHA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const pick = n => Array.from({length:n}, ()=>ALPHA[Math.floor(Math.random()*ALPHA.length)]).join('');
+  return `GM-${pick(4)}-${pick(4)}`;
+}
+
+// 입력값 정규화(대문자/공백 제거, GM- 접두사 보정은 서버에서 처리하므로 그대로 비교)
+function normRecoveryCode(s){ return String(s||'').trim().toUpperCase().replace(/\s+/g,''); }
+
+// 복구 코드 안내 팝업 (가입 직후 / 기존 사용자 첫 안내)
+function showRecoveryPop(code, onDone, isIntro){
+  const pop = el('recoPop');
+  el('recoPopCode').textContent = code || '--------';
+  el('recoPopTitle').textContent = isIntro ? '복구 코드가 생겼어요' : '내 복구 코드예요';
+  pop.classList.remove('hidden');
+  let done = false;
+  const finish = ()=>{ if(done) return; done = true; pop.classList.add('hidden'); onDone && onDone(); };
+  el('recoPopCopy').onclick = ()=>{
+    if(navigator.clipboard) navigator.clipboard.writeText(code).then(()=>toast('복구 코드를 복사했어요'), ()=>toast('코드: '+code));
+    else toast('코드: '+code);
+  };
+  el('recoPopDone').onclick = finish;
+}
+
+// 내 정보 탭의 복구 코드 카드 렌더
+function renderRecovery(){
+  if(!state) return;
+  el('miReco').textContent = state.recovery || '--------';
+}
+
+// 복구 코드로 서버에서 계정/기록을 불러와 로컬 state를 재구성
+async function claimAccount(code){
+  if(!SUPABASE_READY) return null;
+  await ensureUser();
+  const { data, error } = await sb.rpc('claim_account', { p_code: normRecoveryCode(code) });
+  if(error) throw error;
+  if(!data || !data.length) return null;
+  const p = data[0];
+
+  // 서버 운동기록을 로컬 logs로 재구성 (홈 레벨·캘린더·연속일·최근기록 복원)
+  let logs = [];
+  try{
+    const { data: recs } = await sb.from('workout_records')
+      .select('created_at, workout_name, image_url')
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: true });
+    logs = (recs||[]).filter(r=>r.workout_name).map(r=>{
+      const d = new Date(r.created_at);
+      const ymd = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      return { date: ymd, exercise: r.workout_name, start:'', end:'', memo:'', photo: r.image_url||null, ts: d.getTime() };
+    });
+  }catch(e){ console.warn('기록 복원 실패', e); }
+
+  state = {
+    name: p.nickname || '나',
+    photo: p.profile_src || null,
+    avatar: p.avatar_id || null,
+    char: (p.gender === 'f') ? 'f' : 'm',
+    joined: new Date().getFullYear(),
+    roomId: null,
+    createdRoomIds: [],
+    recovery: p.recovery_code || normRecoveryCode(code),
+    logs,
+  };
+  save();
+  return p;
+}
+
+// 복구 코드 입력창 열기/닫기
+function openRecoEnter(){
+  el('recErr').classList.add('hidden');
+  el('recIn').value = '';
+  el('recoEnter').classList.remove('hidden');
+  setTimeout(()=>el('recIn').focus(), 50);
+}
+function closeRecoEnter(){ el('recoEnter').classList.add('hidden'); }
+
+// 복구 코드 제출 → 계정 복구 → 홈 진입
+async function submitRecover(){
+  const code = normRecoveryCode(el('recIn').value);
+  if(!code){ return; }
+  if(!SUPABASE_READY){ toast('서버 연결이 필요해요'); return; }
+  const btn = el('recSubmit'); const orig = btn.textContent;
+  btn.textContent = '불러오는 중…'; btn.disabled = true;
+  el('recErr').classList.add('hidden');
+  try{
+    const p = await claimAccount(code);
+    if(!p){
+      el('recErr').textContent = '복구 코드를 찾을 수 없어요';
+      el('recErr').classList.remove('hidden');
+      return;
+    }
+    // 성공: 게이트/입력창 닫고 홈으로
+    closeRecoEnter();
+    el('invite').classList.add('hidden');
+    el('onboard').classList.add('hidden');
+    inviteMode = 'gate';
+    renderAll(); switchTab('home');
+    updateHeaderRooms();
+    await syncProfile();           // 코드를 현재 계정에 다시 고정
+    await migrateProfilePhoto();
+    await loadMyRooms();           // 가입한 방 복원 + 랭킹 표시
+    subscribeRanking();
+    toast('계정을 복구했어요 👍');
+  }catch(e){
+    console.warn('복구 실패', e);
+    el('recErr').textContent = '복구 실패: ' + (e.message || e);
+    el('recErr').classList.remove('hidden');
+  }finally{
+    btn.disabled = false; btn.textContent = orig;
+  }
 }
 
 /* ===================== 데이터 / 상수 ===================== */
@@ -969,11 +1133,9 @@ function renderRanking(){
   // 챔피언 카드
   const champ = list[0];
   const cl = levelOf(champ.count);
-  const topTie = list.filter(p=>p.count===champ.count).length;   // 1위 동점 인원수
-  const tie = (topTie>1 && champ.count>0);                        // 공동 1위 여부
   const champLabel = (SUPABASE_READY && !isCurrentMonth(viewMonth))
-    ? `👑 ${viewMonth.getMonth()+1}월 ${tie?'공동 ':''}1위 (최종)`
-    : `👑 이 달의 ${tie?'공동 ':''}1위`;
+    ? `👑 ${viewMonth.getMonth()+1}월 1위 (최종)`
+    : '👑 이 달의 1위';
   el('champCard').innerHTML = `
     <div class="absolute -top-10 -right-8 w-32 h-32 rounded-full bg-gold/25 blur-2xl"></div>
     <div class="relative shrink-0 w-16 h-16 rounded-2xl overflow-hidden ring-2 ring-gold">
@@ -981,17 +1143,14 @@ function renderRanking(){
     </div>
     <div class="relative min-w-0 flex-1">
       <p class="text-gold text-[12px] font-bold tracking-wide">${champLabel}</p>
-      <p class="text-xl font-extrabold truncate">${champ.name}${champ.me?' (나)':''}${tie?` 외 ${topTie-1}명`:''}</p>
+      <p class="text-xl font-extrabold truncate">${champ.name}${champ.me?' (나)':''}</p>
       <p class="text-white/55 text-[13px]">Lv.${cl.lv} · ${cl.name}</p>
     </div>
     <p class="relative num text-2xl font-extrabold text-volt">${champ.count}<span class="text-[12px] text-white/50 ml-0.5">회</span></p>`;
 
-  // 리스트 — 동점은 공동 등수(1·1·3 방식: 다음 등수는 인원수만큼 건너뜀)
-  let _prevCount = null, _prevRank = 0;
+  // 리스트
   el('rankList').innerHTML = list.map((p,i)=>{
-    const r = (p.count === _prevCount) ? _prevRank : (i+1);
-    _prevRank = r; _prevCount = p.count;
-    const L = levelOf(p.count);
+    const r=i+1, L=levelOf(p.count);
     const badge = r===1?'👑':r===2?'🥈':r===3?'🥉':`<span class="num text-ink-500 font-bold">${r}</span>`;
     return `<div class="flex items-center gap-3 rounded-2xl p-3 shadow-soft ${p.me?'bg-ink text-white':'bg-white'}">
       <div class="w-7 text-center text-[15px]">${badge}</div>
@@ -1337,7 +1496,7 @@ function renderRoadmap(){
   }).join('');
 }
 
-function renderAll(){ renderHeaderDate(); renderAvatars(); renderStats(); renderCalendar(); renderRanking(); renderBadges(); renderRecentLogs(); }
+function renderAll(){ renderHeaderDate(); renderAvatars(); renderStats(); renderCalendar(); renderRanking(); renderBadges(); renderRecentLogs(); renderRecovery(); }
 
 /* ===================== 탭 전환 ===================== */
 function switchTab(tab){
@@ -1403,30 +1562,19 @@ function fileToDataURL(file, maxW=900, q=0.82){
   });
 }
 
-/* 업로드용: 해상도 축소 + JPEG 압축 → Blob
-   • maxEdge: 긴 변(가로/세로 중 큰 쪽) 기준으로 축소 → 세로 사진도 용량 안정
-   • targetKB: 결과가 이 용량을 넘으면 화질을 단계적으로 낮춰 재압축
-     → 디테일 많은 사진도 일정 용량 이하로 보장 (들쭉날쭉 방지) */
-function compressToBlob(file, maxEdge=800, quality=0.55, targetKB=120){
+/* 업로드용: 해상도 축소 + JPEG 압축 → Blob (보통 수백 KB) */
+function compressToBlob(file, maxW=800, quality=0.55){
   return new Promise((resolve,reject)=>{
     const reader = new FileReader();
     reader.onload = e=>{
       const img = new Image();
       img.onload = ()=>{
-        const scale = Math.min(1, maxEdge/Math.max(img.width, img.height));  // 긴 변 기준 축소
+        const scale = Math.min(1, maxW/img.width);   // 원본보다 키우진 않음
         const canvas = document.createElement('canvas');
         canvas.width  = Math.round(img.width*scale);
         canvas.height = Math.round(img.height*scale);
         canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-        // 목표 용량을 넘으면 화질을 0.1씩 낮춰 재압축 (최저 0.3까지)
-        const tryQ = q=>{
-          canvas.toBlob(b=>{
-            if(!b){ reject(new Error('압축 실패')); return; }
-            if(b.size/1024 > targetKB && q > 0.3) tryQ(Math.round((q-0.1)*100)/100);
-            else resolve(b);
-          }, 'image/jpeg', q);
-        };
-        tryQ(quality);
+        canvas.toBlob(b=> b?resolve(b):reject(new Error('압축 실패')), 'image/jpeg', quality);
       };
       img.onerror = reject; img.src = e.target.result;
     };
@@ -1649,12 +1797,14 @@ function startApp(){
     roomId: currentRoomId || null,
     // 온보딩 전에 방장으로 만든 방을 이관 → 코드 노출(방장 판별)이 유지됨
     createdRoomIds: Array.from(new Set(pendingOwnedRoomIds)),
+    recovery: genRecoveryCode(),
     logs: []
   };
   save();
   el('onboard').classList.add('hidden');
   renderAll(); switchTab('home');
   updateHeaderRooms();
+  showRecoveryPop(state.recovery);   // 가입 직후 복구 코드 안내(저장 유도)
 
   // 새 프로필을 서버에 동기화 + 랭킹/실시간 시작
   if(SUPABASE_READY){
@@ -1711,6 +1861,51 @@ function init(){
   // 월간 결산 팝업 닫기 (2번)
   el('mpClose').onclick = ()=>el('monthPop').classList.add('hidden');
   el('monthPop').querySelector('[data-mpclose]').onclick = ()=>el('monthPop').classList.add('hidden');
+
+  // 데모 도구 (실제 종목·시간으로 데이터 생성)
+  document.querySelectorAll('.demoAdd').forEach(b=>b.onclick=()=>{
+    const n=+b.dataset.n;
+    for(let i=0;i<n;i++){
+      const daysAgo = i<10 ? i : Math.floor(Math.random()*30);   // 최근 연속일 + 무작위
+      const d=new Date(); d.setDate(d.getDate()-daysAgo);
+      const ex = ALL_EXERCISES[Math.floor(Math.random()*ALL_EXERCISES.length)];
+      const sh = 5+Math.floor(Math.random()*18), dur = 20+Math.floor(Math.random()*70);
+      const endTot = sh*60 + dur;
+      state.logs.push({
+        date: dateStr(d), exercise: ex,
+        start: `${pad(sh)}:${pad(Math.floor(Math.random()*60))}`,
+        end: `${pad(Math.floor(endTot/60)%24)}:${pad(endTot%60)}`,
+        memo:'', photo:null, ts: Date.now()-daysAgo*86400000+i,
+      });
+    }
+    save(); renderAll();
+    showLevelUp(levelOf(state.logs.length).lv);
+  });
+  el('demoReset').onclick = ()=>{ if(confirm('모든 인증 기록을 초기화할까요? (프로필은 유지)')){ state.logs=[]; save(); renderAll(); toast('인증 기록을 초기화했어요'); } };
+
+  // 전체 초기화: 저장 데이터를 모두 지우고 온보딩 화면으로 (데모 시연용)
+  el('demoResetAll').onclick = ()=>{
+    if(!confirm('프로필·기록을 포함한 모든 데이터를 삭제하고 온보딩부터 다시 시작할까요?')) return;
+    try{ localStorage.removeItem(KEY); }catch(e){}
+    state = null;
+    myRooms = []; currentRoomId = null; inviteMode = 'gate'; pendingOwnedRoomIds = [];
+    // 입력 폼·온보딩 선택값 초기화
+    obPhoto=null; obPhotoFile=null; obChar='m'; obAvatar=null;
+    if(el('obName')) el('obName').value='';
+    if(el('obPhotoPrev')) el('obPhotoPrev').innerHTML='📷';
+    if(el('obPhotoHint')) el('obPhotoHint').textContent='탭해서 갤러리에서 선택';
+    renderObGender();
+    el('invite').classList.remove('hidden');
+    el('onboard').classList.add('hidden');
+    if(el('invCode')) el('invCode').value='';
+    if(el('roomNameNew')) el('roomNameNew').value='';
+    if(el('invError')) el('invError').classList.add('hidden');
+    if(el('invCancel')) el('invCancel').classList.add('hidden');
+    checkObReady();
+    window.scrollTo(0,0);
+    updateHeaderRooms();
+    toast('전체 초기화 완료 — 처음부터 시작해요');
+  };
 
   // 온보딩 이벤트
   el('obPhotoBtn').onclick = ()=>el('obPhoto').click();
@@ -1801,6 +1996,18 @@ function init(){
   el('createRoomBtn').onclick = submitCreate;
   el('invCancel').onclick = ()=>{ el('invite').classList.add('hidden'); el('invCancel').classList.add('hidden'); inviteMode='gate'; };
 
+  // 복구 코드: 게이트의 진입 링크 / 입력창 / 내 정보 카드 복사
+  el('invRecover').onclick = openRecoEnter;
+  el('recCancel').onclick = closeRecoEnter;
+  el('recSubmit').onclick = submitRecover;
+  el('recIn').addEventListener('keydown', e=>{ if(e.key==='Enter') submitRecover(); });
+  el('miRecoCopy').onclick = ()=>{
+    const code = (state && state.recovery) || '';
+    if(!code) return;
+    if(navigator.clipboard) navigator.clipboard.writeText(code).then(()=>toast('복구 코드를 복사했어요'), ()=>toast('코드: '+code));
+    else toast('코드: '+code);
+  };
+
   // 운동방 허브
   el('hubClose').onclick = closeRoomsHub;
   el('hubAddBtn').onclick = openAddRoom;
@@ -1813,10 +2020,14 @@ function init(){
 
   // 시작
   state = load();
+  // 기존 사용자(복구 코드 없던 시절 가입)에게 코드 backfill → 첫 진입 시 1회 안내
+  let _needRecoIntro = false;
+  if(state && !state.recovery){ state.recovery = genRecoveryCode(); _needRecoIntro = true; save(); }
   if(state){
     el('invite').classList.add('hidden');
     el('onboard').classList.add('hidden');
     renderAll(); switchTab('home');
+    if(_needRecoIntro) showRecoveryPop(state.recovery, null, true);
   }else{
     // 가입 전: 먼저 초대코드 화면을 보여줌
     el('invite').classList.remove('hidden');
@@ -1833,93 +2044,6 @@ function init(){
 }
 
 document.addEventListener('DOMContentLoaded', init);
-
-/* ===================== 당겨서 새로고침 ===================== */
-/* 화면 맨 위에서 아래로 당기면 서버 데이터(방·랭킹)와 내 기록을 다시 불러온다.
-   오버레이(온보딩/시트/팝업 등)가 열려 있거나 스크롤이 맨 위가 아니면 동작 안 함. */
-(function setupPullToRefresh(){
-  const TRIGGER = 56;   // 이 거리(저항 적용 후) 이상 당기면 새로고침
-  const MAX     = 80;   // 인디케이터가 내려오는 최대치
-  let startY = 0, p = 0, pulling = false, refreshing = false;
-
-  // 인디케이터(회전 화살표) 생성
-  const ind = document.createElement('div');
-  ind.id = 'ptr';
-  ind.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg>';
-  document.body.appendChild(ind);
-
-  // 전체화면/시트/팝업이 하나라도 열려 있으면 당겨서 새로고침 비활성
-  function overlayOpen(){
-    return ['onboard','invite','roomsHub','sheet','checkinSheet','levelPop',
-            'monthPop','roadmapPop','celebrate','roomCodePop']
-      .some(id=>{ const e=document.getElementById(id); return e && !e.classList.contains('hidden'); });
-  }
-
-  function moveTo(y, op){
-    ind.style.transform = 'translateY('+y+'px)';
-    ind.style.opacity = op;
-  }
-  function reset(){
-    ind.style.transition = 'transform .25s ease, opacity .25s ease';
-    moveTo(-60, 0);
-  }
-
-  async function refreshData(){
-    if(SUPABASE_READY){
-      try{
-        await ensureUser();
-        if(state) await syncProfile();
-        await loadMyRooms();   // 방 목록 + 랭킹 다시 불러오기
-      }catch(e){ console.warn('새로고침 실패', e); }
-    }
-    renderAll();               // 내 기록·통계·캘린더 다시 그리기
-  }
-
-  async function doRefresh(){
-    refreshing = true;
-    ind.style.transition = 'transform .25s ease, opacity .25s ease';
-    moveTo(22, 1);
-    ind.classList.add('spin');
-    if(navigator.vibrate) navigator.vibrate(10);
-    const started = Date.now();
-    await refreshData();
-    const wait = Math.max(0, 600 - (Date.now()-started));  // 스피너 최소 노출
-    setTimeout(()=>{
-      ind.classList.remove('spin');
-      reset();
-      toast('최신 기록으로 업데이트했어요');
-      setTimeout(()=>{ refreshing = false; }, 260);
-    }, wait);
-  }
-
-  window.addEventListener('touchstart', e=>{
-    if(refreshing || !state) return;
-    if(e.touches.length !== 1) return;
-    if(window.scrollY > 0 || overlayOpen()) return;
-    startY = e.touches[0].clientY;
-    pulling = true; p = 0;
-    ind.style.transition = 'none';
-  }, {passive:true});
-
-  window.addEventListener('touchmove', e=>{
-    if(!pulling || refreshing) return;
-    const raw = e.touches[0].clientY - startY;
-    if(raw <= 0 || window.scrollY > 0){ pulling = false; reset(); return; }
-    p = Math.min(MAX, raw * 0.5);                       // 당길수록 저항
-    const y = -60 + Math.min(p + 38, 82);              // 위(-60)에서 아래로 내려옴
-    moveTo(y, Math.min(1, p/30));
-    ind.querySelector('svg').style.transform = 'rotate('+Math.min(360, p/TRIGGER*360)+'deg)';
-  }, {passive:true});
-
-  window.addEventListener('touchend', ()=>{
-    if(!pulling) return;
-    pulling = false;
-    ind.querySelector('svg').style.transform = '';
-    if(p >= TRIGGER && !refreshing) doRefresh();
-    else reset();
-    p = 0;
-  });
-})();
 
 // PWA: 서비스워커 등록 (https 또는 localhost에서만 동작 — file://에서는 자동 무시)
 if('serviceWorker' in navigator){
