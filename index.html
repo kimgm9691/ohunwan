@@ -505,6 +505,18 @@
     </div>
   </div>
 
+  <!-- ===== 방 입장 직후: 예전 계정 있는지 묻기 (복구 유도) ===== -->
+  <div id="recoAsk" class="fixed inset-0 z-[88] hidden grid place-items-center px-8">
+    <div class="absolute inset-0 bg-ink/60 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-[320px] rounded-3xl bg-bg p-6 text-center pop">
+      <div class="text-[44px] leading-none">👋</div>
+      <h2 class="text-[20px] font-extrabold mt-2">방에 들어왔어요!</h2>
+      <p class="text-[13px] text-ink-500 mt-2 leading-relaxed">예전에 <b>오운완을 써본 적</b>이 있나요?<br>복구 코드를 넣으면 그때 계정·운동기록으로<br>그대로 이어서 시작할 수 있어요.</p>
+      <button id="recoAskYes" class="w-full mt-5 rounded-2xl bg-volt text-ink font-extrabold text-[15px] py-3.5 active:scale-[.98] transition">🔑 복구 코드 입력하기</button>
+      <button id="recoAskNo" class="w-full mt-2 rounded-2xl bg-ink/5 text-ink font-bold text-[14px] py-3 active:scale-95 transition">아니요, 처음이에요</button>
+    </div>
+  </div>
+
   <!-- ===== 운동방 허브 (내가 가입한 방 목록 · 헤더 '운동방' 버튼으로 진입) ===== -->
   <div id="roomsHub" class="fixed inset-0 z-[75] bg-bg overflow-y-auto hidden">
     <div class="min-h-full max-w-phone mx-auto flex flex-col px-6 pt-[max(env(safe-area-inset-top),20px)] pb-10">
@@ -662,6 +674,7 @@ let myRooms = [];            // 내가 속한 방 [{id, code, name}]
 let currentRoomId = null;    // 현재 보고 있는 방
 let inviteMode = 'gate';     // 'gate'(가입 전) | 'add'(이미 가입한 사용자가 방 추가)
 let pendingOwnedRoomIds = []; // 온보딩 전에 방장으로 만든 방 ID 임시 보관 → startApp에서 state로 이관
+let pendingJoinRoomId = null; // 가입 전 방 코드로 막 들어온 방 ID (복구 시 그 방으로 진입시키기 위함)
 
 /* ===================== 초대코드 검증 =====================
    서버가 연결돼 있으면 invite_codes 테이블을 RPC(redeem_invite)로 확인합니다.
@@ -787,7 +800,11 @@ function openRecoEnter(){
   el('recoEnter').classList.remove('hidden');
   setTimeout(()=>el('recIn').focus(), 50);
 }
-function closeRecoEnter(){ el('recoEnter').classList.add('hidden'); }
+function closeRecoEnter(){
+  el('recoEnter').classList.add('hidden');
+  // 방 입장 흐름에서 복구를 취소했고 아직 계정이 없으면 → 선택지 다시 보여줌
+  if(pendingJoinRoomId && !state){ el('recoAsk').classList.remove('hidden'); }
+}
 
 // 복구 코드 제출 → 계정 복구 → 홈 진입
 async function submitRecover(){
@@ -804,8 +821,11 @@ async function submitRecover(){
       el('recErr').classList.remove('hidden');
       return;
     }
-    // 성공: 게이트/입력창 닫고 홈으로
-    closeRecoEnter();
+    // 성공: 방 입장 흐름에서 왔다면 방금 들어온 방으로 진입
+    const joined = pendingJoinRoomId; pendingJoinRoomId = null;
+    if(joined){ state.roomId = joined; save(); }
+    el('recoEnter').classList.add('hidden');
+    el('recoAsk').classList.add('hidden');
     el('invite').classList.add('hidden');
     el('onboard').classList.add('hidden');
     inviteMode = 'gate';
@@ -813,7 +833,7 @@ async function submitRecover(){
     updateHeaderRooms();
     await syncProfile();           // 코드를 현재 계정에 다시 고정
     await migrateProfilePhoto();
-    await loadMyRooms();           // 가입한 방 복원 + 랭킹 표시
+    await loadMyRooms();           // 가입한 방 복원 + 랭킹 표시 (state.roomId 우선)
     subscribeRanking();
     toast('계정을 복구했어요 👍');
   }catch(e){
@@ -1961,8 +1981,13 @@ function init(){
     el('invError').classList.add('hidden');
     const orig = btn.textContent; btn.textContent = '…'; btn.disabled = true;
     try{
-      const res = await joinRoom(el('invCode').value);
-      if(!res) showInviteError('존재하지 않는 방 코드예요');
+      const room = await joinRoom(el('invCode').value);
+      if(!room){ showInviteError('존재하지 않는 방 코드예요'); }
+      else if(inviteMode === 'gate' && !state){
+        // 가입 전(튕겨서 새로 온) 사용자 → 온보딩 전에 복구 기회를 먼저 제공
+        pendingJoinRoomId = room.id;
+        el('recoAsk').classList.remove('hidden');
+      }
       else afterRoomEnter();
     }catch(e){
       console.warn('참여 실패', e);
@@ -1998,6 +2023,9 @@ function init(){
 
   // 복구 코드: 게이트의 진입 링크 / 입력창 / 내 정보 카드 복사
   el('invRecover').onclick = openRecoEnter;
+  // 방 입장 직후 "예전 계정 있나요?" 선택
+  el('recoAskYes').onclick = ()=>{ el('recoAsk').classList.add('hidden'); openRecoEnter(); };
+  el('recoAskNo').onclick  = ()=>{ el('recoAsk').classList.add('hidden'); pendingJoinRoomId = null; afterRoomEnter(); };
   el('recCancel').onclick = closeRecoEnter;
   el('recSubmit').onclick = submitRecover;
   el('recIn').addEventListener('keydown', e=>{ if(e.key==='Enter') submitRecover(); });
