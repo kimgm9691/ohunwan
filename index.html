@@ -779,14 +779,14 @@ async function claimAccount(code){
   }catch(e){ console.warn('기록 복원 실패', e); }
 
   state = {
-    name: p.nickname || '나',
-    photo: p.profile_src || null,
-    avatar: p.avatar_id || null,
-    char: (p.gender === 'f') ? 'f' : 'm',
+    name: p.out_nickname || '나',
+    photo: p.out_profile_src || null,
+    avatar: p.out_avatar_id || null,
+    char: (p.out_gender === 'f') ? 'f' : 'm',
     joined: new Date().getFullYear(),
     roomId: null,
     createdRoomIds: [],
-    recovery: p.recovery_code || normRecoveryCode(code),
+    recovery: p.out_recovery_code || normRecoveryCode(code),
     logs,
   };
   save();
